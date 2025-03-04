@@ -1,0 +1,1035 @@
+---
+title: "AD-BXD GxE manuscript stats and figs"
+author: "Amy Dunn"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    theme: simplex
+    highlight: tango
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+Packages<-c("tidyverse", "ggplot2", "ggrepel", "reshape2", "data.table",
+            "plotrix", "ggpubr", "ggthemes", "gridExtra", "devtools", "ggallin",
+            "multcomp", "plotly", "qtl2")
+# lapply(Packages, install.packages)
+lapply(Packages, library, character.only=TRUE)
+
+## Load individual data
+data.ind<-read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/Behavior/GxE_all_phenotypes_plus_resid_indiv_20240826_filteredforGxEstrains.csv")
+
+#load strain-averaged data
+data<-read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/Behavior/GxE_all_phenotypes_plus_surv_resid_strainavgs_20240826_filteredforGxEstrains.csv")
+
+data<-data[-1] #remove empty index column
+colnames(data)[1]<-"Line" #make sure first column is "Line"
+
+#factorize ages, diet, genotype so that they plot in the desired order
+data$AgeGrp<-as.factor(data$AgeGrp)
+data$Diet <- factor(data$Diet, levels=c("Chow", "HFD"))
+data$Genotype <-factor(data$Genotype, levels=c("Ntg", "5XFAD"))
+
+#filter for major ages in ymaze and cfc data
+Ages <- c("2", "3", "4", "6", "10", "14")
+Ages_ym <- c("2", "6", "10", "14")
+Ages_cfc <- c("3", "6", "14")
+data.ym <- filter(data, AgeGrp %in% Ages_ym)
+data.fc<-filter(data, AgeGrp %in% Ages_cfc)
+
+data.ym.ind <- filter(data.ind, AgeGrp %in% Ages_ym)
+data.fc.ind<-filter(data.ind, AgeGrp %in% Ages_cfc)
+# 
+```
+
+## Total numbers of animals and strains per phenotype
+
+```{r, ns for bx, message=FALSE, warning=FALSE, echo=FALSE}
+#use individual data to quantify number of mice with any phenotyping data and or data from particular tests
+length(unique(na.omit(data.ind$ID))) #7312 mice with any phenotyping data
+length(na.omit(data.ind$CFM.Total)) #6164 mice with CFM data (terminal phenotyping test)
+length(na.omit(data.ind$Ymaze.Prct.SponAlt)) #12639 ymaze tests
+
+data.ind.Chow <- data.ind %>% subset(Diet=="Chow")
+
+length(unique(na.omit(data.ind.Chow$ID))) #4239 Chow mice with any phenotyping data
+length(na.omit(data.ind.Chow$CFM.Total)) #3512 Chow mice with CFM data rminal phenotyping test)
+length(na.omit(data.ind.Chow$Ymaze.Prct.SponAlt)) #7410 Chow ymaze tests
+
+data.ind.hfd <- data.ind %>% subset(Diet=="HFD")
+
+length(unique(na.omit(data.ind.hfd$ID))) #3073 HFD mice with any phenotyping data
+length(na.omit(data.ind.hfd$CFM.Total)) #2652 HFD mice with CFM data (terminal phenotyping test)
+length(na.omit(data.ind.hfd$Ymaze.Prct.SponAlt)) #5229 HFD ymaze tests
+
+#use individual data to quantify number of strains included in these data
+length(unique(data.ind$Line.short)) #41 total strains, including B6, B6xD2, and B6xD2gpnmb
+
+
+
+```
+
+## Figure 1B - percent variance explained by Age, Diet, Sex, Strain, Genotype, and an interaction
+
+```{r fig1B, message=FALSE, warning=FALSE, echo=FALSE}
+#### Figure 1. percent variance explained####
+#Performing ANOVA and plotting proportion of sum of squares for each factor
+
+#Body weight
+weight_anova<-aov(data=data.ind, Weight ~ Line+Diet+Sex+Genotype+AgeGrp+Line:Diet:Sex:Genotype:AgeGrp)
+weight_factors<-summary(weight_anova)[[1]]
+weight_factors<-setDT(weight_factors, keep.rownames = "factor")
+colnames(weight_factors)[3]<-"SumSq"
+weight_factors <- weight_factors[-7,]
+
+weight_factors <- weight_factors %>% 
+  arrange(desc(factor)) %>%
+  mutate(prop = round((SumSq / sum(weight_factors$SumSq) *100),digits=2)) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+
+ggplot(weight_factors, aes(x="", y=SumSq, fill=factor)) +
+  geom_bar(stat="identity", width=1, color="white") +
+  coord_polar("y", start=0) + theme_void() + 
+  geom_text_repel(aes(label = prop), position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette="Dark2") + labs(title="Weight - proportion of var expl")
+
+#Y-maze percent spon alt
+ymaze_anova<-aov(data=data.ind, Ymaze.Prct.SponAlt ~ Line+Diet+Sex+Genotype+AgeGrp+Line:Diet:Sex:Genotype:AgeGrp)
+ymaze_factors<-summary(ymaze_anova)[[1]]
+ymaze_factors<-setDT(ymaze_factors, keep.rownames = "factor")
+colnames(ymaze_factors)[3]<-"SumSq"
+ymaze_factors <- ymaze_factors[-7,]
+
+ymaze_factors <- ymaze_factors %>% 
+  arrange(desc(factor)) %>%
+  mutate(prop = round((SumSq / sum(ymaze_factors$SumSq) *100),digits=2)) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+
+ggplot(ymaze_factors, aes(x="", y=SumSq, fill=factor)) +
+  geom_bar(stat="identity", width=1, color="white") +   
+  geom_text_repel(aes(label = prop), position = position_stack(vjust = 0.5)) +
+  coord_polar("y", start=0) + theme_void() + 
+  scale_fill_brewer(palette="Dark2") + labs(title="ymaze - proportion of var expl")
+
+#ps4
+ps4_anova<-aov(data=data.ind, CFC.PS4 ~ Line+Diet+Sex+Genotype+AgeGrp+Line:Diet:Sex:Genotype:AgeGrp)
+ps4_factors<-summary(ps4_anova)[[1]]
+ps4_factors<-setDT(ps4_factors, keep.rownames = "factor")
+colnames(ps4_factors)[3]<-"SumSq"
+ps4_factors <- ps4_factors[-7,]
+
+ps4_factors <- ps4_factors %>% 
+  arrange(desc(factor)) %>%
+  mutate(prop = round((SumSq / sum(ps4_factors$SumSq) *100),digits=2)) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+
+ggplot(ps4_factors, aes(x="", y=SumSq, fill=factor)) +
+  geom_bar(stat="identity", width=1, color="white") +   
+  geom_text_repel(aes(label = prop), position = position_stack(vjust = 0.5)) +
+  coord_polar("y", start=0) + theme_void() + 
+  scale_fill_brewer(palette="Dark2") + labs(title="ps4 - proportion of var expl")
+
+#cfm
+cfm_anova<-aov(data=data.ind, CFM.Total ~ Line+Diet+Sex+Genotype+AgeGrp+Line:Diet:Sex:Genotype:AgeGrp)
+cfm_factors<-summary(cfm_anova)[[1]]
+cfm_factors<-setDT(cfm_factors, keep.rownames = "factor")
+colnames(cfm_factors)[3]<-"SumSq"
+cfm_factors <- cfm_factors[-7,]
+
+cfm_factors <- cfm_factors %>% 
+  arrange(desc(factor)) %>%
+  mutate(prop = round((SumSq / sum(cfm_factors$SumSq) *100),digits=2)) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+
+ggplot(cfm_factors, aes(x="", y=SumSq, fill=factor)) +
+  geom_bar(stat="identity", width=1, color="white") +   
+  geom_text_repel(aes(label = prop), position = position_stack(vjust = 0.5)) +
+  coord_polar("y", start=0) + theme_void() + 
+  scale_fill_brewer(palette="Dark2") + labs(title="cfm - proportion of var expl")
+```
+
+
+## Figure 1C - Boxplots to show chow vs HFHS
+
+```{r fig1C, message=FALSE, warning=FALSE, echo=FALSE}
+
+#plotting boxplots for outcomes at 14mos, faceted by sex and genotype, with connecting lines between strains fed chow vs HFHS
+#these versions of the plots are printed in Plotly in order for the viewer to be able to move their cursor over each point to identify which strain the datapoint belongs to.
+data_14<-subset(data.fc, AgeGrp=="14") #subsetting just 14mo data
+
+
+a<-ggplot(data_14, aes(Diet, Weight.mn, text=Line))+
+  stat_compare_means(label="p.signif", hide.ns = TRUE) + 
+  geom_boxplot(outlier.shape=NA, width=.5, aes(color=Genotype)) +
+  geom_line(aes(group=Line), color="gray", alpha=0.5)+
+  # stat_summary(fun.data="mean_se", size=.6)+
+  geom_jitter(width=0.02, aes(color=Genotype))+ scale_color_manual(values=c("black", "red"))+ 
+  facet_grid(Genotype~Sex) +theme_classic() +
+  theme(legend.position = "none")
+ggplotly(a)
+
+b<-ggplot(data_14, aes(Diet, Ymaze.Prct.SponAlt.mn, text=Line))+
+  geom_boxplot(outlier.shape=NA, width=.5, aes(color=Genotype)) +
+  geom_line(aes(group=Line), color="gray", alpha=0.5)+
+  # stat_summary(fun.data="mean_se", size=.6)+
+  geom_jitter(width=0.02, aes(color=Genotype))+ scale_color_manual(values=c("black", "red"))+ 
+  stat_compare_means(label="p.signif", hide.ns = TRUE) + facet_grid(Genotype~Sex) +theme_classic() +
+  theme(legend.position = "none")
+ggplotly(b)
+
+c<-ggplot(data_14, aes(Diet, CFC.PS4.mn, text=Line))+
+  geom_boxplot(outlier.shape=NA, width=.5, aes(color=Genotype)) +
+  geom_line(aes(group=Line), color="gray", alpha=0.5)+
+  # stat_summary(fun.data="mean_se", size=.6)+
+  geom_jitter(width=0.02, aes(color=Genotype))+scale_color_manual(values=c("black", "red"))+ 
+  stat_compare_means(label="p.signif", hide.ns = TRUE) + facet_grid(Genotype~Sex) +theme_classic() +
+  theme(legend.position = "none")
+ggplotly(c)
+
+d<-ggplot(data_14, aes(Diet, CFM.Total.mn, text=Line))+
+  geom_boxplot(outlier.shape=NA, width=.5, aes(color=Genotype)) +
+  geom_line(aes(group=Line), color="gray", alpha=0.5)+
+  # stat_summary(fun.data="mean_se", size=.6)+
+  geom_jitter(width=0.02, aes(color=Genotype))+ scale_color_manual(values=c("black", "red"))+ 
+  stat_compare_means(label="p.signif", hide.ns = TRUE) + facet_grid(Genotype~Sex) +theme_classic() +
+  theme(legend.position = "none")
+ggplotly(d)
+
+e<-ggplot(data_14, aes(Diet, Prct_Alive_14mo, text=Line))+
+  stat_compare_means(label="p.signif", hide.ns = TRUE) + 
+  # geom_violin(draw_quantiles=c(0.25,0.5,0.75)) +
+  geom_boxplot()+
+  geom_line(aes(group=Line), color="gray", alpha=0.5)+
+  # stat_summary(fun.data="mean_se", size=.6)+
+  geom_jitter(width=0.02, aes(color=Genotype))+ scale_color_manual(values=c("black", "red"))+ 
+  facet_grid(Genotype~Sex) +theme_classic() +
+  theme(legend.position = "none")
+ggplotly(e)
+
+f<-ggplot(subset(data_14, Genotype=="5XFAD"), aes(Diet, AB_ELISA.mn, text=Line))+
+  geom_boxplot(outlier.shape=NA, width=.5, color="red") +
+  geom_line(aes(group=Line), color="gray", alpha=0.5)+
+  # stat_summary(fun.data="mean_se", size=.6)+
+  geom_jitter(width=0.02, color="red")+ 
+  stat_compare_means(label="p.signif", hide.ns = TRUE) + facet_grid(Genotype~Sex) +theme_classic() +
+  theme(legend.position = "none")
+ggplotly(f)
+
+```
+
+##Figure 2 - composite resilience 
+```{r fig2, message=FALSE, warning=FALSE, echo=FALSE}
+
+# long > wide format to get Ntg and 5XFAD global resilience scores for same diet/sex group in columns
+
+#Some strains are lacking data from one or more groups (male/female, 6 or 14mo, HFD or chow, Ntg or 5XFAD) - make a list of these so that they can be excluded from visualization
+low_data_strains <- c("B6xBXD78", "B6xBXD102", "B6xBXD49", "B6xBXD31", "B6xBXD48a", "B6xBXD100", "B6xBXD34", "B6xBXD64")
+
+# z-scale the outcomes for control (6mo/Ntg/Chow) YMaze and CFC outcomes so that these can be put into a composite score
+data$YM_6moNtgChow_norm <- scale(data$YM_6moNtgChow)
+data$PS4_6moNtgChow_norm <- scale(data$PS4_6moNtgChow)
+data$CFM_6moNtgChow_norm <- scale(data$CFM_6moNtgChow)
+
+#sum the z-scaled cognitive scores to generate a baseline (6mo/Ntg/chow) cognitive composite score for each strain/sex
+data$Cog_composite_6moNtgChow_norm <- data$YM_6moNtgChow_norm+data$PS4_6moNtgChow_norm+data$CFM_6moNtgChow_norm
+
+#pull out group info and cognitive data columns
+data_composite<-data[,c(1:5,22,57,92,315:327)]
+
+#subset only 14mo data
+data_14_composite<-data_composite[which(data_composite$AgeGrp=="14"),]
+
+#z-scale cognitive data columns, and put into new "_norm" column
+data_14_composite$Ymaze.Prct.SponAlt.mn_norm <- scale(data_14_composite$Ymaze.Prct.SponAlt.mn)
+data_14_composite$CFC.PS4.mn_norm<- scale(data_14_composite$CFC.PS4.mn)
+data_14_composite$CFM.Total.mn_norm <- scale(data_14_composite$CFM.Total.mn)
+data_14_composite$Cog_14mo_Composite <- data_14_composite$Ymaze.Prct.SponAlt.mn_norm + 
+  data_14_composite$CFC.PS4.mn_norm + data_14_composite$CFM.Total.mn_norm
+
+#pull out group info and cognitive outcome columns
+data_14_composite<-data_14_composite[,c(1:4,9:25)]
+
+#filter out strains with significant missing data
+data_14_composite <- data_14_composite[!(data_14_composite$Line %in% low_data_strains),]
+
+#make the strain names just the BXD number for ease of visualization on the plot
+data_14_composite$Line <- gsub('B6xBXD','', data_14_composite$Line)
+
+#scatterplot showing baseline composite congitive performance vs 14mo composite cognitive performance
+ggplot(data_14_composite, aes(Cog_composite_6moNtgChow_norm, Cog_14mo_Composite, color=Genotype, group=Diet, alpha=Diet))+
+  geom_point(aes(shape = Diet), size=2)+
+  # geom_smooth(method="lm")+
+  theme_bw() +  scale_color_manual(values=c("black", "red"))+
+  scale_alpha_discrete(range=c(0.8,0.4))+
+  geom_text_repel(aes(label=Line), size=3)+ facet_grid(Diet~Sex) +
+  geom_abline(intercept = 0, slope = 1)
+
+
+#now plot composite residuals (ie distance between 14mo and 6mo/Ntg/Chow for each trait)
+
+#arrange in order of lowest to highest residuals score for F/AD/Chow group
+data_14_composite$Genotype <- factor(data_14_composite$Genotype, levels=c("Ntg", "5XFAD"))
+sel_order <- 
+  data_14_composite %>% 
+  filter(Sex=="Female") %>%
+  filter(Genotype=="5XFAD")%>%
+  filter(Diet=="Chow") %>%
+  arrange(Composite_resid) %>% 
+  mutate(Line = factor(Line))
+
+data_14_composite %>% 
+  mutate(Line = factor(Line, levels = sel_order$Line, ordered = TRUE)) %>% 
+  ggplot(aes(Line, Composite_resid))+
+  geom_line()+
+  geom_point(aes(color=Genotype, shape=Diet, alpha=Diet)) + theme_bw() + 
+  theme(axis.text.x=element_text(angle=90, hjust=1.0, vjust = 0.25))+
+  facet_grid(Diet~Sex) + scale_color_manual(values=c("black", "red")) +
+  scale_shape_manual(values=c(16,17)) + scale_alpha_manual(values=c(1,0.3))
+
+
+#trying to ID strains that are resilient/susceptible to both aging and AD.
+df_globres <- data[!(data$Line %in% low_data_strains),]
+df_globres$Genotype <- factor(df_globres$Genotype, levels=c("Ntg", "5XFAD"))
+
+#rearrange residuals/resilience scores from long to wide - have Ntg and 5XFAD on same-strain row
+df_globres <- data[,c(1:5, 322)]
+df_globres <- subset(df_globres, AgeGrp=="14")
+df_globres <- reshape(data=df_globres, 
+                     timevar = "Genotype", 
+                     idvar = c("Line", "Sex", "Diet"), 
+                     v.names = "Composite_resid", 
+                     direction = "wide")
+
+#calculate difference between 5XFAD and Ntg residuals/resilience scores
+df_globres$Composite_resid_genodiff <- df_globres$Composite_resid.5XFAD - df_globres$Composite_resid.Ntg
+
+#linear model to estimate relationship between 5XFAD and Ntg resilience
+summary(lm(data=df_globres, Composite_resid.5XFAD ~ Composite_resid.Ntg*Sex*Diet)) #Ntg resilience accounts for about 30% of AD resilience
+
+#plot 5XFAD resilience by Ntg resilience
+a<-ggplot(df_globres, aes(Composite_resid.Ntg, Composite_resid.5XFAD))+
+  geom_point(aes(alpha=Diet, shape = Diet, text=Line))+ facet_grid(Diet~Sex)+
+  geom_smooth(method="lm", se=F) + theme_bw() + scale_alpha_manual(values=c(1,0.3))+
+  scale_shape_manual(values=c(16,17))+stat_cor()
+
+ggplotly(a)
+
+#plot 5XFAD-Ntg resilience differential by strain in order from least to most overall resilient
+sel_order <- 
+  df_globres %>% 
+  filter(Sex=="Female") %>%
+  filter(Diet=="Chow") %>%
+  arrange(Composite_resid_genodiff) %>% 
+  mutate(Line = factor(Line))
+b<-df_globres %>% 
+  mutate(Line = factor(Line, levels = sel_order$Line, ordered = TRUE)) %>% 
+  ggplot(aes(Line, Composite_resid_genodiff))+
+  geom_line()+
+  geom_point(aes(shape=Diet, alpha=Diet)) + theme_bw() + 
+  theme(axis.text.x=element_text(angle=90, hjust=1.0, vjust = 0.25))+
+  facet_grid(Diet~Sex) + scale_color_manual(values=c("black")) +
+  scale_shape_manual(values=c(16,17)) + scale_alpha_manual(values=c(1,0.3))
+ggplotly(b)
+
+
+
+```
+
+## Fig 2E-G QTL mapping
+```{r qtl mapping, message=FALSE, warning=FALSE, echo=FALSE}
+
+# zip_datafiles("GxE.yaml", overwrite = TRUE)
+GxE <- read_cross2("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/QTL mapping/GxE_resid_justgxe.zip")
+
+# load in behavioral data for anovas
+pheno_full<-data
+pheno<-pheno_full[,c(1:5, 12, 22,37,57,92,97,162,302,315:319,322, 323)]
+
+#clean up strain names in order for these to match the genotype files
+pheno <- pheno %>% mutate(Line = Line %>% str_remove("B6xBXD")) %>% 
+  mutate(Line = case_when(Line == "B6xD2" ~ "D2",
+                                TRUE ~ Line)) %>%
+  mutate(Line = case_when(Line == "B6xD2Gpnmb" ~ "D2",
+                                TRUE ~ Line)) %>%
+  filter(AgeGrp == 6 | AgeGrp==14)
+colnames(pheno)[1]<-"Line.short"
+
+#define covariates from covar file
+covar.df <- as.data.frame(GxE$covar)
+
+#filter for just 14mo, female, 5XFAD
+aged <- which(covar.df$AgeGrp == 14 & covar.df$Sex==0 & covar.df$Genotype==1)
+GxE.aged <- GxE[aged, ]
+
+summary(GxE.aged)
+map <- GxE.aged$gmap
+pr <- calc_genoprob(cross      = GxE.aged, 
+                    map        = map, 
+                    error_prob = 0.002)
+Xcovar <- get_x_covar(GxE.aged)
+# covariates - just diet
+covar <- model.matrix(~Diet, 
+                      data = GxE.aged$covar)[,-1, drop = FALSE]
+
+# kinship correction
+kinship.loco <- calc_kinship(probs = pr, type = "loco")
+
+# mapping
+out <- scan1(genoprobs = pr, 
+             pheno     = GxE.aged$pheno[,"Composite_resid"],
+             Xcovar    = Xcovar,
+             addcovar  = covar,  
+             kinship   = kinship.loco)
+
+# permutations for significance level
+seed<-141139
+set.seed(seed)
+perms <- scan1perm(genoprobs = pr,
+                   pheno     = GxE.aged$pheno[,"Composite_resid"],
+                   kinship   = kinship.loco,
+                   Xcovar    = Xcovar,
+                   addcovar  = covar,  
+                   n_perm    = 1000)
+
+#identify significant and suggestive thresholds
+summary_scan1perm(perms)
+thr <- summary_scan1perm(perms, alpha = 0.05)
+thr.sug <- summary_scan1perm(perms, alpha = 0.33)
+
+
+# plot map with significant and suggestive threshold lines
+plot_scan1(out, map, ylim=c(0,3.6)) + abline(h = thr, col = "red", lwd = 2) + abline(h = thr.sug, col = "orange", lwd = 2)
+
+# find peak using a 1.5LOD drop from the suggestive peak - peak at Chr10 59.45cM
+find_peaks(out, map, threshold = thr.sug, drop = 1.5)
+
+#which is the peak marker SNP? - rs29373822
+find_marker(map, chr = 10, pos = 59.45)
+
+## QTL effect for suggestive locus on Chr10
+c10eff <- scan1coef(pr[,"10"], GxE$pheno[,"Composite_resid"])
+plot_coef(c10eff, map["10"], columns = 1:2, 
+          scan1_output = out, legend = "topleft")
+
+# peak genotype effect for Chr10
+head(c10eff)
+g <- maxmarg(pr, map, chr=10, pos=59.45, return_char=TRUE)
+plot_pxg(g, GxE$pheno[,"Composite_resid"], ylab="Residuals")
+
+# how much does this variant explain
+genopheno <- read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/QTL mapping/GxE_genopheno_justGxe.csv")
+
+#subset phenotype/genotype data to just 14mo AD Females
+genopheno_14FAD<-subset(genopheno, Genotype=="1" & Sex=="0" & AgeGrp=="14")
+
+#How much variance does this SNP explain in cognitive outcomes?
+summary(lm(data=subset(genopheno_14FAD, AgeGrp=="14" & Genotype=="1" & Sex=="0"), Composite_resid ~ rs29373822)) #adj r2 = 0.1793
+summary(lm(data=subset(genopheno, AgeGrp=="14" & Genotype=="1" & Sex=="0"), CFM.Total.mn ~ rs29373822))
+summary(lm(data=subset(genopheno, AgeGrp=="14" & Genotype=="1" & Sex=="0"), CFC.PS4.mn ~ rs29373822))
+summary(lm(data=subset(genopheno, AgeGrp=="14" & Genotype=="1" & Sex=="0"), Ymaze.Prct.SponAlt.mn ~ rs29373822))
+
+#decode group identifiers to generate correct plotting labels
+genopheno$Diet[genopheno$Diet=="1"]<-"HFD"
+genopheno$Diet[genopheno$Diet=="0"]<-"Chow"
+genopheno$Sex[genopheno$Sex=="0"]<-"Female"
+genopheno$Sex[genopheno$Sex=="1"]<-"Male"
+genopheno$Genotype[genopheno$Genotype=="0"]<-"Ntg"
+genopheno$Genotype[genopheno$Genotype=="1"]<-"5XFAD"
+genopheno$Genotype<-factor(genopheno$Genotype, levels=c("Ntg", "5XFAD"))
+
+#set up comparisons for plot stats - jusst comparing B/D in 5XFAD and Ntg
+my_comparisons<- list(c("Ntg.B", "Ntg.D"), c("5XFAD.B", "5XFAD.D"))
+
+
+ggplot(subset(genopheno, AgeGrp=="14"), aes(x=interaction(Genotype,rs29373822), Composite_resid, color=as.factor(Genotype)))+
+  geom_boxplot() + geom_point(position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.75)) + 
+  facet_grid(Sex~Diet) + scale_color_manual(labels=c("Ntg", "5XFAD"), values=c("black", "red"), name="Genotype")+
+  theme_classic() + stat_compare_means(comparisons=my_comparisons, method="t.test")+coord_cartesian(ylim=c(-10,12))
+
+```
+
+##Figure 3 polygenic resilience scores
+```{r fig 3, message=FALSE, warning=FALSE, echo=FALSE}
+# calculating polygenetic resilience score
+#classify strains as susceptible or resilient based on composite resilience score at 14mo
+data_14 <-data %>%
+          filter(AgeGrp == "14") %>%
+          filter(Genotype == "5XFAD") %>%
+          filter(Diet == "Chow") %>%
+          filter(Sex == "Female")
+
+# if residuals are > median, then strain is "resilient", otherwise they're susceptible
+data_14$Susc_Res <- ifelse(data_14$Composite_resid>median(data_14$Composite_resid, na.rm=TRUE),  'Resilient',  'Susceptible')
+
+#pull out just group info and residuals and classification columns
+data_classification <- data_14[,c(1,4,322,328)]
+
+# add column with no "B6xBXD" in line name for merging to genotype file
+data_classification$Line <- gsub('B6xBXD', '', data_classification$Line)
+data_classification$Line <- gsub('B6xD2', 'D2', data_classification$Line)
+
+colnames(data_classification)[1] <- "Strain"
+#read in genotypes file
+geno <- read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/PRS/BXD_Geno-19Jan2017_newest_rqtl format_allStrains.csv")
+
+genopheno <- merge(data_classification, geno, by="Strain", all.x=TRUE)
+
+#read in file with marker SNPs for each gene
+resilience_markers_genos <- read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/PRS/AD_seto_resilience_genes_geno.csv")
+resilience_markers_genos <- resilience_markers_genos[-12,] # drop this Rab10 marker as there is no data associated with it
+resilience_markers_genos <- resilience_markers_genos %>% distinct(gene, .keep_all=TRUE) #keep just one marker per gene (proximal marker script pulls closest 2 markers but we only need one here)
+resilience_markers <- resilience_markers_genos[,c(1,3)] # just keep gene and marker info
+colnames(resilience_markers)[1:2] <- c("Gene", "Marker") #change column names
+
+col_indices <- match(resilience_markers$Marker,names(genopheno)) #get column numbers in the "genopheno" file that match the gene marker SNPs
+
+col_indices <- c(1,2,3,4,5,col_indices) #get list of columns with mouse metadata and gene marker SNPS
+
+#keep only columns in genopheno file with SNPs of interest and create new AD gene genotypes file
+resilience_genotypes <- genopheno[,col_indices]
+
+#pull genotypes of interest for strains included in analysis
+resilience_genotypes <- resilience_genotypes[!is.na(resilience_genotypes$Susc_Res),]
+
+#Susceptible group
+individual.scores <- data.frame(matrix(data=NA, nrow =0, ncol = 3))
+colnames(individual.scores) = c("Marker", "log.resilience", "susceptibilityAllele")
+
+for (i in 6:21){
+  marker = colnames(resilience_genotypes)[i] #identify markers
+  #calculate number of susceptible and resilient strains have B or D allele of each gene locus to generate ratio of being susceptible/resilient if harboring a B or D allele at these loci
+  BSusceptible <- nrow(resilience_genotypes[which(resilience_genotypes$Susc_Res == "Susceptible" & resilience_genotypes[,i] == "B"),])
+  DSusceptible <- nrow(resilience_genotypes[which(resilience_genotypes$Susc_Res == "Susceptible" & resilience_genotypes[,i] == "D"),])
+  Susceptible.ratio <- BSusceptible/DSusceptible
+  BResilient <- nrow(resilience_genotypes[which(resilience_genotypes$Susc_Res == "Resilient" & resilience_genotypes[,i] == "B"),])
+  DResilient <- nrow(resilience_genotypes[which(resilience_genotypes$Susc_Res == "Resilient" & resilience_genotypes[,i] == "D"),])
+  Resilient.ratio <- BResilient/DResilient
+  #calculate ratio of a strain with given marker B allele being more likely to resilient vs susceptible
+  oddsRatioB <- Resilient.ratio/Susceptible.ratio
+  if(oddsRatioB > 1){
+    resilienceAllele = "B"
+  } else if (oddsRatioB < 1){
+    resilienceAllele = "D"
+  } else {
+    resilienceAllele = "NA"
+  }
+  #recoding so that resilient D alleles also have >1 resilience score
+  recode.resilience <- ifelse(oddsRatioB >= 1, oddsRatioB, 1/oddsRatioB)
+  log.resilience <- log10(recode.resilience) #this end result gives you the score that needs to be added for each gene
+  summary <- data.frame(Marker = marker, log.resilience = log.resilience, resilienceAllele = resilienceAllele)
+  individual.scores = rbind(individual.scores, summary)
+}
+
+#####
+#now have individual resilience scores for each marker, sum to create resilience score for each strain
+#make new dataframe where instead of allele, have score based on presence/absence of resilience allele
+resilience.data <- data.frame(matrix(data=NA, nrow = 40, ncol = 0))
+for (i in 6:21){
+  marker = colnames(resilience_genotypes)[i]
+  resilience.allele <- as.character(individual.scores$resilienceAllele[which(individual.scores$Marker %in% marker)]) #defines resilience allele for given marker
+  score.single <- individual.scores$log.resilience[which(individual.scores$Marker %in% marker)] #harboring resilience allele = better single score
+  score.perGene <- ifelse(resilience.allele == "B", score.single*2, score.single) #homozygous B resilience alleles = more resilience
+  
+  #given a certain column, assign score based on allele
+  grs.source <- data.frame(ifelse(resilience_genotypes[,i] == resilience.allele, score.perGene, 0))
+  colnames(grs.source) = marker
+  resilience.data <- cbind(resilience.data, grs.source)
+}
+resilience.data$GRS.sum <- rowSums(resilience.data) #sum scores for resilience alleles for each strain
+resilience.data$GRS.transform <- resilience.data$GRS.sum*(16/sum(individual.scores$log.resilience)) #divide sum by # of alleles (16) to get avg resilience score
+resilience.data <- data.frame(resilience_genotypes[,c(1:5)], resilience.data) #attach strain metadata to resilience allele data
+cor.test(resilience.data$GRS.transform, resilience.data$Composite_resid) #does polygenetic resilience score correlate with resilience score (it should, as it was derived from this score)
+GRSbyStrain <- data.frame(GRS = resilience.data$GRS.transform) #make new dataframe with genetic resilience score
+
+#plot resilience scores and phenotype data
+ggplot(resilience.data, aes(GRS.transform, Composite_resid, label=Strain))+
+  geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+  theme_classic()
+
+
+
+colnames(resilience.data)[1]<-"Line.short"
+# add column with no "B6xBXD" in line name for merging to genotype file
+data$Line.short <- data$Line
+data$Line.short <- gsub('B6xBXD', '', data$Line.short)
+data$Line.short <- gsub('B6xD2', 'D2', data$Line.short)
+resilience.data.pared <- resilience.data[c(1,4,6:23)]
+resilience.data_composite <- merge(resilience.data.pared, data, by="Line.short", all = TRUE)
+
+resilience.data_composite <- resilience.data_composite %>% filter(Genotype=="5XFAD" & AgeGrp == "14")
+
+ggplot(resilience.data_composite, aes(GRS.transform, Composite_resid, label=Line, color=Sex))+
+  geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+  theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Diet=="HFD"), GRS.transform ~ Composite_resid))
+
+summary(lm(data=resilience.data_composite, GRS.transform ~ Composite_resid*Diet*Sex))
+# ggplot(resilience.data_composite, aes(GRS.transform, Weight.mn, label=Line, color=Sex))+
+#   geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+#   theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+# 
+# ggplot(resilience.data_composite, aes(GRS.transform, PS4_residuals, label=Line, color=Sex))+
+#   geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+#   theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+# 
+# ggplot(resilience.data_composite, aes(GRS.transform, YM_residuals, label=Line, color=Sex))+
+#   geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+#   theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+# 
+# ggplot(resilience.data_composite, aes(GRS.transform, CFM_residuals, label=Line, color=Sex))+
+#   geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+#   theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+# 
+# ggplot(resilience.data_composite, aes(GRS.transform, AB_ELISA.mn, label=Line, color=Sex))+
+#   geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+#   theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+# 
+# ggplot(resilience.data_composite, aes(GRS.transform, Prct_Alive_14mo, label=Line, color=Sex))+
+#   geom_point()+ geom_smooth(method = "lm") + stat_cor() +
+#   theme_classic() + scale_color_manual(values=c("deeppink", "dodgerblue")) + facet_wrap(~Diet)
+
+
+#what mediates global resilience - mediation analysis to see if any major metabolic outcomes mediate relationship between genetic resilience and cognitive resilience
+summary(lm(data=subset(data, AgeGrp==14), Composite_resid ~ Genotype+Sex+Diet+Prct_Alive_14mo))
+
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="HFD"), GRS.transform ~ Composite_resid))
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="HFD"), GRS.transform ~ Composite_resid+GTT.AUC.baseline.normalized.mn))
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="HFD"), GRS.transform ~ GTT.AUC.baseline.normalized.mn))
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="HFD"), Composite_resid ~ GTT.AUC.baseline.normalized.mn))
+
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="Chow"), GRS.transform ~ Composite_resid))
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="Chow"), GRS.transform ~ Composite_resid+GTT.AUC.baseline.normalized.mn))
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="Chow"), GRS.transform ~ GTT.AUC.baseline.normalized.mn))
+summary(lm(data=subset(resilience.data_composite, Sex=="Female" & Genotype=="5XFAD" & Diet=="Chow"), Composite_resid ~ GTT.AUC.baseline.normalized.mn))
+
+summary(lm(data=subset(resilience.data_composite, Sex=="Male" & Genotype=="5XFAD" & Diet=="HFD"), GRS.transform ~ Composite_resid))
+summary(lm(data=subset(resilience.data_composite, Sex=="Male" & Genotype=="5XFAD" & Diet=="HFD"), GRS.transform ~ Composite_resid+GTT.AUC.baseline.normalized.mn))
+summary(lm(data=subset(resilience.data_composite, Sex=="Male" & Genotype=="5XFAD" & Diet=="HFD"), GRS.transform ~ GTT.AUC.baseline.normalized.mn))
+summary(lm(data=subset(resilience.data_composite, Sex=="Male" & Genotype=="5XFAD" & Diet=="HFD"), Composite_resid ~ GTT.AUC.baseline.normalized.mn))
+```
+
+#Fig 3B ORs for human resilience and sex differences alleles
+```{r fig3B, message=FALSE, warning=FALSE, echo=FALSE}
+#read in genotypes file
+geno <- read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/PRS/BXD_Geno-19Jan2017_newest_rqtl format_allStrains.csv")
+
+
+resilience_markers_genos <- read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/PRS/AD_seto_resilience_genes_geno.csv")
+resilience_markers_genos <- resilience_markers_genos[-12,] # drop this Rab10 marker as there is no data associated with it
+resilience_markers_genos <- resilience_markers_genos %>% distinct(gene, .keep_all=TRUE) #keep just one marker per gene (proximal marker script pulls closest 2 markers but we only need one here)
+resilience_markers <- resilience_markers_genos[,c(1,3)] # just keep gene and marker info
+colnames(resilience_markers)[1:2] <- c("Gene", "Marker") #change column names
+
+col_indices <- match(resilience_markers$Marker,names(geno)) #get column numbers in the "genopheno" file that match the gene marker SNPs
+
+
+sex_markers_genos <- read.csv("C:/Users/ardun/Box/OConnell lab team folder/Lab members/Amy Dunn/GxE R01/Data/AD_eissman_sexdif_genes_geno.csv")
+# sex_markers_genos <- sex_markers_genos[-12,] # drop this Rab10 marker as there is no data associated with it
+sex_markers_genos <- sex_markers_genos %>% distinct(gene, .keep_all=TRUE) #keep just one marker per gene (proximal marker script pulls closest 2 markers but we only need one here)
+sex_markers <- sex_markers_genos[,c(1,3)] # just keep gene and marker info
+colnames(sex_markers)[1:2] <- c("Gene", "Marker") #change column names
+
+col_indices_sex <- match(sex_markers$Marker,names(geno))
+
+
+col_indices <- c(2,col_indices,col_indices_sex) 
+
+col_indices<-as.integer(unique(lapply(col_indices, sort)))
+
+geno_res_markers <- geno[,col_indices]
+# geno_res_markers <- geno_res_markers[-(1:4),]
+
+all_markers<-rbind(sex_markers, resilience_markers)
+all_markers <- all_markers %>% distinct(Marker, .keep_all=TRUE) 
+
+names(geno_res_markers) <- all_markers$Gene[match(names(geno_res_markers), all_markers$Marker)]
+
+colnames(geno_res_markers)[1]<-"Line.short"
+
+data_w_markers <- merge(geno_res_markers, data, by="Line.short", all = TRUE)
+
+my_cols <- colnames(data_w_markers)[2:22]
+
+nafill = function(df, H, col_names){
+  
+  # Subset the original data frame with the targeted columns
+  
+  df1 = df[,col_names]
+  
+  #Apply the replacement with NA in all columns in the 2nd data frame.
+  
+  df1[df1 == H] = NA
+  
+  # Assign the resulted column in the 2nd data frame to the original data frame
+  
+  df[,col_names] = df1[, col_names]
+  
+  return(df)
+  
+}
+
+data_w_markers<-nafill(data_w_markers, "H", my_cols)
+
+
+oddsr_chow <- lm(data=data_w_markers, subset=(Diet=="Chow" & Sex=="Female" & Genotype=="5XFAD" & AgeGrp=="14"), 
+            Composite_resid ~ App + Apoe + Casp7 + Abca1+ Abca7 + Sorl1 + Rab10 + Picalm + Rest +
+              Plcg2 + Treml2 + Tmem106b + Ms4a6b + Bdnf + Dlgap2 + Kl)
+
+oddsr_df_chow <- broom::tidy(x=oddsr_chow)
+oddsr_df_chow <- oddsr_df_chow[-1,]
+ggplot(oddsr_df_chow, aes(estimate, reorder(term, estimate), label=paste("p = ",round(p.value,3))))+ geom_text_repel()+
+  geom_point()+
+  geom_errorbarh(aes(xmin=estimate-std.error, xmax=estimate+std.error), height=0)+
+  theme_bw() + geom_vline(xintercept=0, linetype="dotted") + labs(title="Allele effect sizes - Chow")+
+  scale_x_continuous(trans = pseudolog10_trans)
+
+
+oddsr_hfd <- lm(data=data_w_markers, subset=(Diet=="HFD" & Sex=="Female" & Genotype=="5XFAD" & AgeGrp=="14"), 
+            Composite_resid ~ App + Apoe + Casp7 + Abca1+ Abca7 + Sorl1 + Rab10 + Picalm + Rest +
+              Plcg2 + Treml2 + Tmem106b + Ms4a6b + Bdnf + Dlgap2 + Kl)
+
+oddsr_df_hfd <- broom::tidy(x=oddsr_hfd)
+oddsr_df_hfd <- oddsr_df_hfd[-1,]
+ggplot(oddsr_df_hfd, aes(estimate, reorder(term, estimate), label=paste("p = ",round(p.value,3))))+ geom_text_repel()+
+  geom_point()+
+  geom_errorbarh(aes(xmin=estimate-std.error, xmax=estimate+std.error), height=0)+
+  theme_bw() + geom_vline(xintercept=0, linetype="dotted") + labs(title="Allele effect sizes - HFD")+
+  scale_x_continuous(trans = pseudolog10_trans)
+
+oddsr_df_chow$diet <- "chow"
+oddsr_df_hfd$diet <- "hfd"
+oddsr_df_bothdiet <- rbind(oddsr_df_chow, oddsr_df_hfd)
+
+ggplot(oddsr_df_bothdiet, aes(estimate, reorder(term, estimate), color=diet, label=paste("p = ",round(p.value,2))))+ 
+  geom_text_repel()+
+  geom_point(aes(shape=diet))+
+  geom_errorbarh(aes(xmin=estimate-std.error, xmax=estimate+std.error), height=0, position=position_dodge(width=0.5))+
+  theme_bw() + geom_vline(xintercept=0, linetype="dotted", ) + labs(title="Allele effect sizes by diet")+
+  scale_x_continuous(trans = pseudolog10_trans)+scale_color_manual(values=c("black", "gray50"))
+
+
+# sex-specific loci
+oddsr_m <- lm(data=data_w_markers, subset=(Diet=="Chow" & Sex=="Male" & Genotype=="5XFAD" & AgeGrp=="14"), 
+            Composite_resid ~ Apoe + Sorl1 + Picalm + Ms4a6b + Ptk2b + Echdc3 + Spi1 + Kat8 + Kdm6a)
+
+oddsr_df_m <- broom::tidy(x=oddsr_m)
+oddsr_df_m <- oddsr_df_m[-1,]
+ggplot(oddsr_df_m, aes(estimate, reorder(term, estimate), label=paste("p = ",round(p.value,3))))+ geom_text_repel()+
+  geom_point()+
+  geom_errorbarh(aes(xmin=estimate-std.error, xmax=estimate+std.error), height=0)+
+  theme_bw() + geom_vline(xintercept=0, linetype="dotted") + labs(title="Allele effect sizes - m")+
+  scale_x_continuous(trans = pseudolog10_trans)
+
+
+oddsr_f <- lm(data=data_w_markers, subset=(Diet=="Chow" & Sex=="Female" & Genotype=="5XFAD" & AgeGrp=="14"), 
+            Composite_resid ~ Apoe + Sorl1 + Picalm + Ms4a6b + Ptk2b + Echdc3 + Spi1 + Kat8 + Kdm6a)
+
+oddsr_df_f <- broom::tidy(x=oddsr_f)
+oddsr_df_f <- oddsr_df_f[-1,]
+ggplot(oddsr_df_f, aes(estimate, reorder(term, estimate), label=paste("p = ",round(p.value,3))))+ geom_text_repel()+
+  geom_point()+
+  geom_errorbarh(aes(xmin=estimate-std.error, xmax=estimate+std.error), height=0)+
+  theme_bw() + geom_vline(xintercept=0, linetype="dotted") + labs(title="Allele effect sizes - f")+
+  scale_x_continuous(trans = pseudolog10_trans)
+
+oddsr_df_m$sex <- "m"
+oddsr_df_f$sex <- "f"
+oddsr_df_bothsex <- rbind(oddsr_df_m, oddsr_df_f)
+
+ggplot(oddsr_df_bothsex, aes(estimate, reorder(term, estimate), color=sex, label=paste("p = ",round(p.value,2))))+ 
+  geom_text_repel()+
+  geom_point(aes(shape=sex))+
+  geom_errorbarh(aes(xmin=estimate-std.error, xmax=estimate+std.error), height=0, position=position_dodge(width=0.5))+
+  theme_bw() + geom_vline(xintercept=0, linetype="dotted", ) + labs(title="Allele effect sizes by sex")+
+  scale_x_continuous(trans = pseudolog10_trans)+scale_color_manual(values=c("deeppink", "dodgerblue"))
+
+
+```
+
+#Fig 4, varied cognitive responses to HFD
+```{r fig4, message=FALSE, warning=FALSE, echo=FALSE}
+data_f_14 <- subset(data.ind, AgeGrp=="14" & Sex == "Female" & Genotype=="5XFAD")
+hfhs_lm <- lm(data=data_f_14, CFM.Total ~ Line:Diet)
+summary(hfhs_lm)
+
+data.fc.ind$Diet <- factor(data.fc.ind$Diet, levels=c("Chow", "HFD"))
+
+ggplot(subset(data.fc.ind, Genotype=="5XFAD" & AgeGrp=="14"), aes(Line.short, CFM.Total, color=Diet, group=Diet))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_jitterdodge(dodge.width=.75))+
+  # geom_boxplot() + 
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = .5), aes(group=Diet))+
+  scale_color_manual(values=c("red", "lightsalmon")) + facet_wrap(~Sex, ncol=1) +
+  coord_cartesian(ylim=c(0,120))+
+  # labs(title="B6xBXD68 - Ace/Apoe D/D", y="Ymaze", x="Age")+ 
+  theme_bw() + theme(legend.position = "none") + 
+  stat_compare_means(label="p.signif", method="t.test") 
+
+# individual trajectories
+
+
+data.fc.ind$AgeGrp<-factor(data.fc.ind$AgeGrp, levels=c("3", "6", "14"))
+
+ggplot(subset(data.fc.ind, Line.short=="B6"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+ggplot(subset(data.fc.ind, Line.short=="B6xBXD125"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6xBXD125", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+ggplot(subset(data.fc.ind, Line.short=="B6xBXD154"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6xBXD154", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+ggplot(subset(data.fc.ind, Line.short=="B6xBXD152"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6xBXD152", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+ggplot(subset(data.fc.ind, Line.short=="B6xBXD73"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6xBXD73", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+ggplot(subset(data.fc.ind, Line.short=="B6xBXD14"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6xBXD14", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+ggplot(subset(data.fc.ind, Line.short=="B6xBXD66"), aes(AgeGrp, CFM.Total, color=Genotype))+
+  stat_summary(fun.data="mean_se", size=.6, position=position_dodge(width = 0.5))+ 
+  # stat_summary(geom="line", fun.y="mean", aes(group=Genotype), line.type="dotted", alpha=0.5)+
+  geom_point(alpha = 0.3, position=position_jitterdodge(jitter.width=0.1,dodge.width = 0.5), aes(group=Genotype))+
+  scale_color_manual(values=c("black", "red")) + facet_grid(Sex~Diet) +
+  # coord_cartesian(ylim=c(0,50))+ 
+  labs(title="B6xBXD66", y="Memory recall (%)", x="Age")+ 
+  theme_few() + theme(legend.position = "none") + stat_compare_means(aes(group=Genotype), label="p.signif") 
+
+```
+
+#Supplemental figure 1 - trajectories of weight and cognitive phenotypes
+```{r supplemental figure 1 and stats, message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(data.ym, mapping = aes(x = AgeGrp, y = Weight.mn, group=interaction(Genotype, Diet), color=Genotype)) +
+  stat_summary(geom="line", fun="mean", aes(linetype=Diet))+
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0, linewidth=1, position=position_dodge(width = 0.05))+
+  scale_color_manual(values=c("black", "red"))+ 
+  scale_linetype_manual(values=c("solid", "dashed"))+
+  theme_classic() + theme(plot.title=element_text(hjust=0.5)) + 
+  labs(x="Age (mo)", y="Weight (g)", title="Weight") + facet_wrap(~Sex)
+
+f_weight_anova <- aov(data=subset(data.ym, Sex=="Female"), Weight.mn ~ Genotype*AgeGrp*Diet)
+summary(f_weight_anova)
+TukeyHSD(f_weight_anova)
+m_weight_anova <- aov(data=subset(data.ym, Sex=="Male"), Weight.mn ~ Genotype*AgeGrp*Diet)
+summary(m_weight_anova)
+TukeyHSD(m_weight_anova)
+
+ggplot(data.ym, mapping = aes(x = AgeGrp, y = Ymaze.Prct.SponAlt.mn, group=interaction(Genotype, Diet), color=Genotype)) +
+  stat_summary(geom="line", fun="mean", aes(linetype=Diet))+
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0, linewidth=1, position=position_dodge(width = 0.05))+
+  scale_color_manual(values=c("black", "red"))+ 
+  scale_linetype_manual(values=c("solid", "dashed"))+
+  theme_classic() + theme(plot.title=element_text(hjust=0.5)) + 
+  labs(x="Age (mo)", y="% Spon Alt", title="Ymaze") + facet_wrap(~Sex) + coord_cartesian(ylim=c(50,70))
+
+f_ym_anova <- aov(data=subset(data.ym, Sex=="Female"), Ymaze.Prct.SponAlt.mn ~ Genotype*AgeGrp*Diet)
+summary(f_ym_anova)
+f_ym_anova_simplified<-aov(data=subset(data.ym, Sex=="Female"), Ymaze.Prct.SponAlt.mn ~ AgeGrp)
+TukeyHSD(f_ym_anova_simplified)
+m_ym_anova <- aov(data=subset(data.ym, Sex=="Male"), Ymaze.Prct.SponAlt.mn ~ Genotype*AgeGrp*Diet)
+summary(m_ym_anova)
+m_ym_anova_simplified<-aov(data=subset(data.ym, Sex=="Male"), Ymaze.Prct.SponAlt.mn ~ Diet+AgeGrp)
+TukeyHSD(m_ym_anova_simplified)
+
+ggplot(data.fc, mapping = aes(x = AgeGrp, y = CFC.PS4.mn, group=interaction(Genotype, Diet), color=Genotype)) +
+  stat_summary(geom="line", fun="mean", aes(linetype=Diet))+
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0, linewidth=1, position=position_dodge(width = 0.05))+
+  scale_color_manual(values=c("black", "red"))+ 
+  scale_linetype_manual(values=c("solid", "dashed"))+
+  theme_classic() + theme(plot.title=element_text(hjust=0.5)) + 
+  labs(x="Age (mo)", y="% Spon Alt", title="PS4") + facet_wrap(~Sex) + coord_cartesian(ylim=c(20,70))
+
+f_ps4_anova <- aov(data=subset(data.fc, Sex=="Female"), CFC.PS4.mn ~ Genotype*AgeGrp*Diet)
+summary(f_ps4_anova)
+f_ps4_anova_simplified<-aov(data=subset(data.fc, Sex=="Female"), CFC.PS4.mn ~ Genotype+Genotype:AgeGrp)
+TukeyHSD(f_ps4_anova_simplified)
+m_ps4_anova <- aov(data=subset(data.fc, Sex=="Male"), CFC.PS4.mn ~ Genotype*AgeGrp*Diet)
+summary(m_ps4_anova)
+m_ps4_anova_simplified<-aov(data=subset(data.fc, Sex=="Male"), CFC.PS4.mn ~ Genotype:AgeGrp)
+TukeyHSD(m_ps4_anova_simplified)
+
+ggplot(data.fc, mapping = aes(x = AgeGrp, y = CFM.Total.mn, group=interaction(Genotype, Diet), color=Genotype)) +
+  stat_summary(geom="line", fun="mean", aes(linetype=Diet))+
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0, linewidth=1, position=position_dodge(width = 0.05))+
+  scale_color_manual(values=c("black", "red"))+ 
+  scale_linetype_manual(values=c("solid", "dashed"))+
+  theme_classic() + theme(plot.title=element_text(hjust=0.5)) + 
+  labs(x="Age (mo)", y="% Spon Alt", title="CFM") + facet_wrap(~Sex) + coord_cartesian(ylim=c(20,70))
+
+f_cfm_anova <- aov(data=subset(data.fc, Sex=="Female"), CFM.Total.mn ~ Genotype*AgeGrp*Diet)
+summary(f_cfm_anova)
+f_cfm_anova_simplified<-aov(data=subset(data.fc, Sex=="Female"), CFM.Total.mn ~ Genotype:AgeGrp)
+TukeyHSD(f_cfm_anova_simplified)
+m_cfm_anova <- aov(data=subset(data.fc, Sex=="Male"), CFM.Total.mn ~ Genotype*AgeGrp*Diet)
+summary(m_cfm_anova)
+m_cfm_anova_simplified<-aov(data=subset(data.fc, Sex=="Male"), CFM.Total.mn ~ Diet:AgeGrp)
+TukeyHSD(m_cfm_anova_simplified)
+```
+
+#Supplemental figure 2
+```{r supplemental figure 2 and stats, message=FALSE, warning=FALSE, echo=FALSE}
+data_14<-subset(data, AgeGrp=="14")
+
+data_14_composite <- data_14[!(data_14$Line %in% low_data_strains),]
+
+data_14_composite$Line <- gsub('B6xBXD','', data_14_composite$Line)
+
+data_14_composite$Genotype <- factor(data_14_composite$Genotype, levels=c("Ntg", "5XFAD"))
+
+#ymaze
+ggplot(data_14_composite, aes(YM_6moNtgChow, Ymaze.Prct.SponAlt.mn, color=Genotype, group=Diet, alpha=Diet))+
+  geom_point(aes(shape = Diet), size=2)+
+  # geom_smooth(method="lm")+
+  theme_classic() +  scale_color_manual(values=c("black", "red"))+
+  scale_alpha_discrete(range=c(0.8,0.4))+
+  geom_text_repel(aes(label=Line), size=3)+ facet_grid(Sex~Diet) +
+  geom_abline(intercept = 0, slope = 1)
+
+sel_order <- 
+  data_14_composite %>% 
+  filter(Sex=="Female") %>%
+  filter(Genotype=="5XFAD")%>%
+  filter(Diet=="Chow") %>%
+  arrange(YM_residuals) %>% 
+  mutate(Line = factor(Line))
+
+data_14_composite %>% 
+  mutate(Line = factor(Line, levels = sel_order$Line, ordered = TRUE)) %>% 
+  ggplot(aes(Line, YM_residuals))+
+  geom_line()+
+  geom_point(aes(color=Genotype)) + theme_bw() + 
+  theme(axis.text.x=element_text(angle=90, hjust=1.0, vjust = 0.25))+
+  facet_grid(Diet~Sex) + scale_color_manual(values=c("black", "red"))
+
+#ps4
+
+ggplot(data_14_composite, aes(PS4_6moNtgChow, CFC.PS4.mn, color=Genotype, group=Diet, alpha=Diet))+
+  geom_point(aes(shape = Diet), size=2)+
+  # geom_smooth(method="lm")+
+  theme_classic() +  scale_color_manual(values=c("black", "red"))+
+  scale_alpha_discrete(range=c(0.8,0.4))+
+  geom_text_repel(aes(label=Line), size=3)+ facet_grid(Sex~Diet) +
+  geom_abline(intercept = 0, slope = 1)
+
+sel_order <- 
+  data_14_composite %>% 
+  filter(Sex=="Female") %>%
+  filter(Genotype=="5XFAD")%>%
+  filter(Diet=="Chow") %>%
+  arrange(PS4_residuals) %>% 
+  mutate(Line = factor(Line))
+
+data_14_composite %>% 
+  mutate(Line = factor(Line, levels = sel_order$Line, ordered = TRUE)) %>% 
+  ggplot(aes(Line, PS4_residuals))+
+  geom_line()+
+  geom_point(aes(color=Genotype)) + theme_bw() + 
+  theme(axis.text.x=element_text(angle=90, hjust=1.0, vjust = 0.25))+
+  facet_grid(Diet~Sex) + scale_color_manual(values=c("black", "red"))
+
+#cfm
+
+ggplot(data_14_composite, aes(CFM_6moNtgChow, CFM.Total.mn, color=Genotype, group=Diet, alpha=Diet))+
+  geom_point(aes(shape = Diet), size=2)+
+  # geom_smooth(method="lm")+
+  theme_classic() +  scale_color_manual(values=c("black", "red"))+
+  scale_alpha_discrete(range=c(0.8,0.4))+
+  geom_text_repel(aes(label=Line), size=3)+ facet_grid(Sex~Diet) +
+  geom_abline(intercept = 0, slope = 1)
+
+sel_order <- 
+  data_14_composite %>% 
+  filter(Sex=="Female") %>%
+  filter(Genotype=="5XFAD")%>%
+  filter(Diet=="Chow") %>%
+  arrange(CFM_residuals) %>% 
+  mutate(Line = factor(Line))
+
+data_14_composite %>% 
+  mutate(Line = factor(Line, levels = sel_order$Line, ordered = TRUE)) %>% 
+  ggplot(aes(Line, CFM_residuals))+
+  geom_line()+
+  geom_point(aes(color=Genotype)) + theme_bw() + 
+  theme(axis.text.x=element_text(angle=90, hjust=1.0, vjust = 0.25))+
+  facet_grid(Diet~Sex) + scale_color_manual(values=c("black", "red"))
+```
+
+#Supplemental figure 3
+```{r sup fig 3}
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(Sensorimotor_composite.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(Weight.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(GTT.0min.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(GTT.AUC.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(Lean.mass.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(Fat.mass.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+ggplot(subset(data, AgeGrp=="14" & Genotype=="5XFAD"), aes(RQ_corrected.mn, CFM.Total.mn, color=Diet))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="lm")+ scale_color_manual(values=c("red", "lightsalmon"))+
+  stat_cor() + theme_classic() + facet_grid(~Sex)
+
+```
+
